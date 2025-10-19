@@ -3,679 +3,229 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>VR Camera — Gaze Menu + Pseudo-3D + Wide Lens</title>
+<title>VR Phone Camera 3D</title>
 <style>
-  html,body { height:100%; margin:0; background:#000; color:#fff; font-family:system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
-  #container { width:100%; height:100vh; display:flex; align-items:stretch; justify-content:center; position:relative; overflow:hidden; gap:0; }
-  .eyeCanvas { background:#000; display:block; width:50%; height:100%; }
-  #controls {
-      position: absolute; top:10px; left:10px; right:10px; display:flex; gap:8px; align-items:center;
-      background:rgba(0,0,0,0.35); padding:8px; border-radius:8px;
-      backdrop-filter: blur(4px);
-      z-index:90;
-  }
+  html,body { height:100%; margin:0; background:#000; color:#fff; font-family:system-ui, -apple-system, sans-serif; }
+  #container { width:100%; height:100vh; display:flex; align-items:stretch; justify-content:center; overflow:hidden; gap:0; position:relative; }
+  .eyeCanvas { width:50%; height:100%; display:block; background:#000; }
+  #controls { position:absolute; top:10px; left:10px; right:10px; display:flex; gap:8px; align-items:center;
+              background:rgba(0,0,0,0.35); padding:8px; border-radius:8px; backdrop-filter: blur(4px); }
   .btn { background:#111; color:#fff; border:1px solid #333; padding:8px 10px; border-radius:6px; cursor:pointer; }
   .btn:active { transform:translateY(1px); }
   label { font-size:13px; display:flex; gap:6px; align-items:center; color:#ddd; }
   input[type=range] { width:140px; }
-  #video { display:none; }
-  .ui { transition: opacity 300ms ease; opacity:0; pointer-events:none; }
-  .ui.visible { opacity:1; pointer-events:auto; }
-  .focused { outline:2px solid #0af; }
-  /* world-anchored menu (absolute but updated by gyro mapping) */
-  #menu {
-    position: absolute; width: max(300px, 80vw); z-index:88;
-    background: rgba(10,10,10,0.75); padding:10px; border-radius:10px; color:#fff;
-    display:none; gap:8px; flex-wrap:wrap; backdrop-filter: blur(6px);
-  }
-  #menu label { margin:0 6px; }
-  #gazePointer { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:95; pointer-events:none; display:none; }
-  .gaze-ring { width:56px; height:56px; border-radius:50%; background:rgba(0,0,0,0.35); display:flex; align-items:center; justify-content:center; }
-  .gaze-dot { width:10px; height:10px; border-radius:50%; background:rgba(255,255,255,0.95); }
-  #hint { position:absolute; bottom:12px; left:12px; right:12px; text-align:center; font-size:13px; color:#ddd; z-index:80; pointer-events:none; }
-  #popup {
-    position: fixed; left:50%; top:20%; transform: translateX(-50%); z-index:200; display:none;
-    background: rgba(0,0,0,0.8); padding:10px 14px; border-radius:8px; color:#fff; font-size:14px;
-  }
-  /* small visual highlight for focused element */
-  .gaze-focus { box-shadow: 0 0 0 3px rgba(0,170,255,0.15) inset, 0 0 8px rgba(0,170,255,0.08); }
-  /* make inputs larger for touch */
-  select, input[type="range"] { touch-action: none; user-select: none; -webkit-user-select: none; }
+  #menu { position:absolute; bottom:18px; left:50%; transform:translateX(-50%); z-index:55;
+          background:rgba(0,0,0,0.6); color:#fff; padding:10px; border-radius:10px; display:none; gap:8px;
+          flex-direction:row; align-items:center; backdrop-filter: blur(6px);
+          max-width:92vw; flex-wrap:wrap; overflow:auto; }
 </style>
 </head>
 <body>
-  <div id="container">
-    <canvas id="left" class="eyeCanvas"></canvas>
-    <canvas id="right" class="eyeCanvas"></canvas>
+<div id="container">
+  <canvas id="left" class="eyeCanvas"></canvas>
+  <canvas id="right" class="eyeCanvas"></canvas>
 
-    <div id="controls" class="ui visible">
-      <button id="startBtn" class="btn">Start Camera</button>
-      <button id="flipBtn" class="btn">Flip</button>
-      <button id="fsBtn" class="btn">Fullscreen</button>
-      <label>Zoom <input id="zoom" type="range" min="1" max="2" step="0.01" value="1"> <span id="zoomVal">1.00</span></label>
-      <label><input id="mirror" type="checkbox"> Mirror</label>
-    </div>
-
-    <div id="hint">Put phone in VR headset. Tap to open the menu.</div>
-
-    <!-- world anchored menu (positioned by script using anchor angles) -->
-    <div id="menu" role="dialog" aria-hidden="true">
-      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <button id="menuClose" class="btn">Close</button>
-        <button id="wideBtn" class="btn">Wide Lens</button>
-        <select id="deviceSelect" aria-label="Camera device"></select>
-        <label>FPS <select id="fpsSelect"><option value="30">30</option><option value="60">60</option><option value="120">120</option></select></label>
-      </div>
-      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">
-        <label>Eye Sep <input id="sep" type="range" min="-0.4" max="0.4" step="0.002" value="0.20"> <span id="sepVal">0.20</span></label>
-        <label>Parallax <input id="parallax" type="range" min="0" max="1" step="0.01" value="0.25"> <span id="parVal">0.25</span></label>
-        <label>Align X <input id="alignX" type="range" min="-0.1" max="0.1" step="0.001" value="0"></label>
-        <label>Wide <input id="wideMode" type="checkbox"></label>
-      </div>
-    </div>
-
-    <div id="popup"></div>
+  <div id="controls">
+    <button id="startBtn" class="btn">Start Camera</button>
+    <button id="flipBtn" class="btn">Flip Camera</button>
+    <button id="fsBtn" class="btn">Fullscreen</button>
+    <label>Eye sep <input id="sep" type="range" min="-0.4" max="0.4" step="0.002" value="0.2"> <span id="sepVal">0.20</span></label>
+    <label>Zoom <input id="zoom" type="range" min="1" max="2" step="0.01" value="1"> <span id="zoomVal">1.00</span></label>
+    <label><input id="mirror" type="checkbox"> Mirror</label>
+    <label><input id="wideMode" type="checkbox"> Wide Lens</label>
   </div>
 
-  <video id="video" autoplay playsinline muted></video>
-
-  <!-- gaze reticle -->
-  <div id="gazePointer" aria-hidden="true">
-    <div class="gaze-ring"><div class="gaze-dot"></div></div>
+  <div id="menu">
+    <button id="menuToggle" class="btn">Menu</button>
+    <select id="deviceSelect" aria-label="Camera device"></select>
+    <label>FPS <select id="fpsSelect"><option>30</option><option>60</option><option>120</option></select></label>
+    <label>Zoom <input id="zoomMenu" type="range" min="1" max="2" step="0.01" value="1"> <span id="zoomMenuVal">1.00</span></label>
   </div>
+</div>
+
+<video id="video" autoplay playsinline muted style="display:none;"></video>
 
 <script>
-/* ========== DOM & state ========== */
 const video = document.getElementById('video');
 const leftCanvas = document.getElementById('left');
 const rightCanvas = document.getElementById('right');
 const startBtn = document.getElementById('startBtn');
 const flipBtn = document.getElementById('flipBtn');
 const fsBtn = document.getElementById('fsBtn');
+const sepControl = document.getElementById('sep');
 const zoomControl = document.getElementById('zoom');
+const sepVal = document.getElementById('sepVal');
 const zoomVal = document.getElementById('zoomVal');
 const mirrorChk = document.getElementById('mirror');
-
+const wideModeChk = document.getElementById('wideMode');
+const container = document.getElementById('container');
 const menu = document.getElementById('menu');
-const menuClose = document.getElementById('menuClose');
+const menuToggle = document.getElementById('menuToggle');
 const deviceSelect = document.getElementById('deviceSelect');
 const fpsSelect = document.getElementById('fpsSelect');
-const sepControl = document.getElementById('sep');
-const sepVal = document.getElementById('sepVal');
-const parControl = document.getElementById('parallax');
-const parVal = document.getElementById('parVal');
-const alignX = document.getElementById('alignX');
-const wideBtn = document.getElementById('wideBtn');
-const wideModeChk = document.getElementById('wideMode');
+const zoomMenu = document.getElementById('zoomMenu');
+const zoomMenuVal = document.getElementById('zoomMenuVal');
 
-const gazePointer = document.getElementById('gazePointer');
-const popup = document.getElementById('popup');
+let stream=null, usingFacingMode='environment', rafId=null;
+let eyeSep=parseFloat(sepControl.value), zoom=parseFloat(zoomControl.value), mirror=false;
+let menuActive=false, lastTapTime=0, holding=false, activeSlider=null;
+let startHeadX=0, startValue=0;
 
-let stream = null;
-let usingFacingMode = 'environment';
-let currentDeviceId = null;
-let rafId = null;
-let eyeSep = parseFloat(sepControl.value);
-let parallax = parseFloat(parControl.value);
-let zoom = parseFloat(zoomControl.value);
-let mirror = false;
-let alignOffset = parseFloat(alignX.value) || 0;
+// offscreen canvas for portrait rotation
+const rotCanvas=document.createElement('canvas'), rotCtx=rotCanvas.getContext('2d');
 
-let dpr = window.devicePixelRatio || 1;
+function stopStream(){ if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } if(rafId){ cancelAnimationFrame(rafId); rafId=null; } }
 
-/* ========== offscreen rotate canvas for portrait video ========== */
-const rotCanvas = document.createElement('canvas');
-const rotCtx = rotCanvas.getContext('2d');
-
-/* ========== orientation / world anchor ========== */
-// smoothed orientation
-let _lastGamma = 0, _lastBeta = 0, _alpha = 0.12;
-let currentGamma = 0, currentBeta = 0;
-let gyroEnabled = false;
-
-// anchor in world angles when menu was opened
-let menuAnchor = null; // { gamma, beta, anchored: true, screenX?, screenY? }
-
-function mapAnglesToScreen(gamma, beta) {
-  // map gamma,beta angles to screen coordinates (same mapping used throughout)
-  const sx = (window.innerWidth / 2) + (gamma / 90) * (window.innerWidth / 3);
-  const sy = (window.innerHeight / 2) + (beta / 90) * (window.innerHeight / 3);
-  return { x: sx, y: sy };
-}
-
-function updateMenuAnchorPosition() {
-  if (!menuAnchor) return;
-  // compute screen position for stored anchor angles and current orientation
-  // We want the menu to appear where the user was looking when they tapped:
-  // anchor is stored as absolute world angles. To draw it relative to current head orientation, we compute its screen position directly from anchor angles.
-  const pos = mapAnglesToScreen(menuAnchor.gamma, menuAnchor.beta);
-  // clamp inside viewport with margin
-  const left = Math.max(6, Math.min(window.innerWidth - menu.offsetWidth - 6, pos.x - menu.offsetWidth/2));
-  const top = Math.max(6, Math.min(window.innerHeight - menu.offsetHeight - 6, pos.y - menu.offsetHeight/2));
-  menu.style.left = left + 'px';
-  menu.style.top = top + 'px';
-}
-
-/* ========== camera helpers ========== */
-async function enumerateCameras() {
-  try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const cams = devices.filter(d => d.kind === 'videoinput');
-    deviceSelect.innerHTML = '';
-    cams.forEach(c => {
-      const opt = document.createElement('option');
-      opt.value = c.deviceId;
-      opt.textContent = c.label || ('camera ' + (deviceSelect.length+1));
-      deviceSelect.appendChild(opt);
-    });
-  } catch (err) {
-    console.warn('enumerateDevices failed', err);
-  }
-}
-enumerateCameras();
-
-async function startCamera(constraints = null) {
+async function startCamera(){
   stopStream();
-  try {
-    const base = constraints || {
-      audio: false,
-      video: {
-        facingMode: { ideal: usingFacingMode },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-        frameRate: { ideal: parseInt(fpsSelect.value,10) }
-      }
-    };
-    stream = await navigator.mediaDevices.getUserMedia(base);
-    video.srcObject = stream;
+  try{
+    const constraints={ audio:false, video:{ facingMode:{ideal:usingFacingMode}, width:{ideal:1920}, height:{ideal:1080} } };
+    stream = await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject=stream;
     await video.play();
-    // pick currentDeviceId from track settings if available
-    const tk = stream.getVideoTracks()[0];
-    if (tk && tk.getSettings) {
-      const s = tk.getSettings();
-      if (s.deviceId) currentDeviceId = s.deviceId;
-    }
-    await enumerateCameras();
     resizeCanvases();
     drawLoop();
-  } catch (err) {
-    alert('Camera error: ' + (err && err.message ? err.message : err));
-    console.error(err);
-  }
+  }catch(err){ alert('Camera error: '+(err.message||err)); console.error(err); }
 }
 
-function stopStream() {
-  if (stream) {
-    stream.getTracks().forEach(t => t.stop());
-    stream = null;
-  }
-  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+async function tryFlipCamera(){ usingFacingMode = usingFacingMode==='environment'?'user':'environment'; await startCamera(); }
+
+function resizeCanvases(){
+  const dpr=window.devicePixelRatio||1;
+  const w=window.innerWidth, h=window.innerHeight, eyeW=Math.floor(w/2);
+  [leftCanvas,rightCanvas].forEach(c=>{
+    c.style.width=eyeW+'px'; c.style.height=h+'px';
+    c.width=Math.max(1,Math.floor(eyeW*dpr));
+    c.height=Math.max(1,Math.floor(h*dpr));
+  });
 }
 
-/* ========== wide-angle mode ========== */
-async function tryWideLens() {
-  // try enumerating cameras and pick one whose label suggests ultra-wide
-  try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const cams = devices.filter(d => d.kind === 'videoinput');
-    const wide = cams.find(c => /wide|ultra|ultrawide|ultra-wide|0.5x|0\.5x/i.test(c.label));
-    if (wide) {
-      // restart using this deviceId
-      stopStream();
-      try {
-        const constraints = { video: { deviceId: { exact: wide.deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: parseInt(fpsSelect.value,10) } } };
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-        video.srcObject = stream; await video.play();
-        currentDeviceId = wide.deviceId;
-        enumerateCameras();
-        resizeCanvases();
-        showPopup('Switched to wide lens');
-        return true;
-      } catch (err) {
-        console.warn('Failed to start wide device', err);
-        showPopup('Couldn\'t switch to wide-lens camera.');
-        return false;
-      }
-    } else {
-      showPopup('Couldn\'t switch to wide-lens camera.');
-      return false;
-    }
-  } catch (err) {
-    console.warn('wide lens search failed', err);
-    showPopup('Couldn\'t switch to wide-lens camera.');
-    return false;
-  }
+window.addEventListener('resize',resizeCanvases);
+
+sepControl.addEventListener('input', e=>{ eyeSep=parseFloat(e.target.value)||0; sepVal.textContent=eyeSep.toFixed(3); });
+zoomControl.addEventListener('input', e=>{ zoom=parseFloat(e.target.value)||1; zoomVal.textContent=zoom.toFixed(2); zoomMenu.value=zoom; zoomMenuVal.textContent=zoom.toFixed(2); });
+zoomMenu.addEventListener('input', e=>{ const v=parseFloat(e.target.value)||1; zoom=v; zoomControl.value=v; zoomVal.textContent=v.toFixed(2); zoomMenuVal.textContent=v.toFixed(2); });
+
+mirrorChk.addEventListener('change', e=>{ mirror=e.target.checked; });
+
+startBtn.addEventListener('click',startCamera);
+flipBtn.addEventListener('click',tryFlipCamera);
+fsBtn.addEventListener('click', ()=>{ if(!document.fullscreenElement){ container.requestFullscreen?.(); }else{ document.exitFullscreen?.(); } });
+
+async function enumerateCameras(){
+  try{
+    const devices=await navigator.mediaDevices.enumerateDevices();
+    const cams=devices.filter(d=>d.kind==='videoinput');
+    deviceSelect.innerHTML='';
+    cams.forEach(c=>{
+      const opt=document.createElement('option'); opt.value=c.deviceId; opt.textContent=c.label||c.deviceId; deviceSelect.appendChild(opt);
+    });
+  }catch(err){ console.warn(err); }
 }
-
-/* ========== UI and popup ========== */
-function showPopup(msg, ms = 2000) {
-  popup.textContent = msg;
-  popup.style.display = 'block';
-  popup.style.opacity = '1';
-  clearTimeout(popup._t);
-  popup._t = setTimeout(() => { popup.style.opacity = '0'; setTimeout(()=>popup.style.display='none',220); }, ms);
-}
-
-/* ========== resize canvases ========== */
-function resizeCanvases() {
-  dpr = window.devicePixelRatio || 1;
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  const eyeW = Math.floor(w / 2);
-  leftCanvas.style.width = eyeW + 'px'; leftCanvas.style.height = h + 'px';
-  rightCanvas.style.width = eyeW + 'px'; rightCanvas.style.height = h + 'px';
-  leftCanvas.width = Math.max(1, Math.floor(eyeW * dpr)); leftCanvas.height = Math.max(1, Math.floor(h * dpr));
-  rightCanvas.width = Math.max(1, Math.floor(eyeW * dpr)); rightCanvas.height = Math.max(1, Math.floor(h * dpr));
-}
-
-/* ========== draw loop: pseudo-3D stereo from single image ========== */
-function ensureRotated(svw, svh) {
-  const shouldRotate = svh > svw;
-  if (!shouldRotate) return { src: video, w: svw, h: svh, rotated: false };
-  if (rotCanvas.width !== svh || rotCanvas.height !== svw) {
-    rotCanvas.width = svh; rotCanvas.height = svw;
-  }
-  rotCtx.save();
-  rotCtx.clearRect(0,0,rotCanvas.width, rotCanvas.height);
-  // rotate 90deg clockwise
-  rotCtx.translate(rotCanvas.width, 0);
-  rotCtx.rotate(Math.PI / 2);
-  rotCtx.drawImage(video, 0, 0, svw, svh);
-  rotCtx.restore();
-  return { src: rotCanvas, w: rotCanvas.width, h: rotCanvas.height, rotated: true };
-}
-
-function drawLoop() {
-  const ctxL = leftCanvas.getContext('2d');
-  const ctxR = rightCanvas.getContext('2d');
-
-  function frame() {
-    if (!video.videoWidth) {
-      rafId = requestAnimationFrame(frame);
-      return;
-    }
-    const lw = leftCanvas.width, lh = leftCanvas.height, rw = rightCanvas.width, rh = rightCanvas.height;
-    const svw = video.videoWidth, svh = video.videoHeight;
-    const rotatedSource = ensureRotated(svw, svh);
-    const src = rotatedSource.src, srcW = rotatedSource.w, srcH = rotatedSource.h;
-
-    // scale based on zoom
-    const scale = 1 / Math.max(zoom, 1);
-    let tW = Math.max(1, srcW * scale), tH = Math.max(1, srcH * scale);
-    const destAspect = (lw) / (lh);
-    if (tW / tH > destAspect) tW = tH * destAspect; else tH = tW / destAspect;
-    const sxc = (srcW - tW) / 2, syc = (srcH - tH) / 2;
-
-    // compute stereo offsets: eyeSep fraction of tW plus parallax rotation angle (small)
-    const sepPx = eyeSep * tW;
-    const par = parallax; // 0..1
-
-    const alignPx = alignOffset * tW;
-    const sxL = Math.max(0, Math.min(srcW - tW, sxc - sepPx * 0.5 + alignPx));
-    const sxR = Math.max(0, Math.min(srcW - tW, sxc + sepPx * 0.5 + alignPx));
-    const sy = Math.max(0, Math.min(srcH - tH, syc));
-
-    // draw left
-    ctxL.save();
-    if (mirror) { ctxL.translate(lw,0); ctxL.scale(-1,1); }
-    ctxL.clearRect(0,0,lw,lh);
-    // simulate slight viewpoint rotation by translating and small rotation based on parallax
-    const rotAngle = par * 0.02; // small angle
-    ctxL.translate(lw/2, lh/2);
-    ctxL.rotate(-rotAngle);
-    ctxL.drawImage(src, sxL, sy, tW, tH, -lw/2, -lh/2, lw, lh);
-    ctxL.restore();
-
-    // draw right
-    ctxR.save();
-    if (mirror) { ctxR.translate(rw,0); ctxR.scale(-1,1); }
-    ctxR.clearRect(0,0,rw,rh);
-    ctxR.translate(rw/2, rh/2);
-    ctxR.rotate(rotAngle);
-    ctxR.drawImage(src, sxR, sy, tW, tH, -rw/2, -rh/2, rw, rh);
-    ctxR.restore();
-
-    // when menu visible, draw small calibration dots in each eye so users can fuse the view
-    if (menu.style.display !== 'none') {
-      const radius = Math.max(6, Math.min(14, Math.floor(lw * 0.012)));
-      // draw dots in each eye (position to help converge)
-      ctxL.save(); ctxL.fillStyle = 'rgba(255,255,255,0.95)'; ctxL.beginPath(); ctxL.arc(lw/2 + (sepPx*0.5)*(lw/tW), lh/2, radius, 0, Math.PI*2); ctxL.fill(); ctxL.restore();
-      ctxR.save(); ctxR.fillStyle = 'rgba(255,255,255,0.95)'; ctxR.beginPath(); ctxR.arc(rw/2 - (sepPx*0.5)*(rw/tW), rh/2, radius, 0, Math.PI*2); ctxR.fill(); ctxR.restore();
-    }
-
-    rafId = requestAnimationFrame(frame);
-  }
-
-  frame();
-}
-
-/* ========== gyro and gaze mapping ========== */
-function onDeviceOrientation(e) {
-  // e.gamma (left-right tilt), e.beta (front-back tilt)
-  if (e.gamma == null || e.beta == null) return;
-  // smoothing
-  _lastGamma = _lastGamma * (1 - _alpha) + e.gamma * _alpha;
-  _lastBeta = _lastBeta * (1 - _alpha) + e.beta * _alpha;
-  currentGamma = _lastGamma; currentBeta = _lastBeta;
-
-  // update anchored menu position if present
-  if (menuAnchor) updateMenuAnchorPosition();
-
-  // update focus highlight: element currently under center of screen
-  updateFocusUnderGaze();
-}
-
-function enableGyro() {
-  if (gyroEnabled) return;
-  // iOS permission
-  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-    DeviceOrientationEvent.requestPermission().then(res => {
-      if (res === 'granted') {
-        window.addEventListener('deviceorientation', onDeviceOrientation);
-        gyroEnabled = true;
-      } else {
-        showPopup('Gyro permission denied.');
-      }
-    }).catch(err => { console.warn('gyro request failed', err); showPopup('Gyro permission error.'); });
-  } else {
-    window.addEventListener('deviceorientation', onDeviceOrientation);
-    gyroEnabled = true;
-  }
-}
-
-function disableGyro() {
-  if (!gyroEnabled) return;
-  window.removeEventListener('deviceorientation', onDeviceOrientation);
-  gyroEnabled = false;
-}
-
-/* ========== gaze focus & interaction ========== */
-let focusEl = null;
-function updateFocusUnderGaze() {
-  // compute element at center
-  const cx = Math.round(window.innerWidth / 2);
-  const cy = Math.round(window.innerHeight / 2);
-  const el = document.elementFromPoint(cx, cy);
-  if (el !== focusEl) {
-    if (focusEl) focusEl.classList.remove('gaze-focus');
-    focusEl = el;
-    if (focusEl && (menu.contains(focusEl) || document.getElementById('controls').contains(focusEl))) {
-      focusEl.classList.add('gaze-focus');
-    } else {
-      focusEl = null;
-    }
-  }
-}
-
-/* ========== touch / tap / hold logic ========== */
-let menuActive = false;
-let lastTapTime = 0;
-let dragging = false;
-let dragTarget = null;
-let dragStartGamma = 0;
-let dragStartValue = 0;
-
-function openMenuAtCurrentLook(xFallback, yFallback) {
-  // compute anchor world angles from current orientation (if gyro available use currentGamma/currentBeta; else compute from screen coords)
-  if (gyroEnabled) {
-    // store the current world angles centered on where user is now looking
-    menuAnchor = { anchored: true, gamma: currentGamma || 0, beta: currentBeta || 0 };
-  } else {
-    // fallback: map screen coords to angles
-    const cx = xFallback || window.innerWidth/2;
-    const cy = yFallback || window.innerHeight/2;
-    const relX = cx - (window.innerWidth/2);
-    const relY = cy - (window.innerHeight/2);
-    menuAnchor = { anchored: true, gamma: (relX/(window.innerWidth/3))*90, beta: (relY/(window.innerHeight/3))*90 };
-  }
-  updateMenuAnchorPosition();
-  menu.style.display = 'block';
-  menu.classList.add('visible');
-  gazePointer.style.display = 'block';
-  menuActive = true;
-  // enable gyro so anchor stays stable in world space
-  enableGyro();
-}
-
-function closeMenu() {
-  menu.style.display = 'none';
-  menu.classList.remove('visible');
-  gazePointer.style.display = 'none';
-  menuActive = false;
-  menuAnchor = null;
-  if (focusEl) { focusEl.classList.remove('gaze-focus'); focusEl = null; }
-  dragging = false; dragTarget = null;
-}
-
-window.addEventListener('touchstart', (ev) => {
-  ev.preventDefault();
-  const t = ev.touches && ev.touches[0];
-  const now = Date.now();
-  const dt = now - lastTapTime;
-  lastTapTime = now;
-
-  if (!menuActive) {
-    // first tap opens menu anchored in world at current look
-    openMenuAtCurrentLook(t ? t.clientX : null, t ? t.clientY : null);
-    return;
-  }
-
-  // if double-tap within 350ms -> close menu
-  if (dt > 0 && dt < 350) {
-    closeMenu();
-    return;
-  }
-
-  updateFocusUnderGaze();
-  // if focusEl is a range, start dragging immediately while pressed
-  if (focusEl && focusEl.tagName === 'INPUT' && focusEl.type === 'range') {
-    dragging = true;
-    dragTarget = focusEl;
-    // record starting gamma and value
-    dragStartGamma = currentGamma || 0;
-    dragStartValue = parseFloat(dragTarget.value);
-    // enlarge focus style to indicate active drag
-    dragTarget.classList.add('gaze-focus');
-    return;
-  }
-
-  // else mark potential click: we'll perform click on touchend if no drag started
-  // store nothing: we'll call click on touchend if appropriate
-}, { passive: false });
-
-window.addEventListener('touchend', (ev) => {
-  ev.preventDefault();
-  if (!menuActive) return;
-  if (dragging) {
-    // finish drag
-    if (dragTarget) dragTarget.classList.remove('gaze-focus');
-    dragging = false; dragTarget = null;
-    return;
-  }
-  // not dragging -> treat as click: click element under gaze (if focusEl)
-  updateFocusUnderGaze();
-  if (focusEl) {
-    // simulate click for buttons/selects etc.
-    focusEl.click();
-  }
-}, { passive: false });
-
-/* keyboard/mouse fallback for desktop testing */
-window.addEventListener('click', (ev) => {
-  // simple desktop click behavior: toggle menu with first click if closed; otherwise click focused element
-  if (!menuActive) {
-    openMenuAtCurrentLook(ev.clientX, ev.clientY);
-    return;
-  }
-  updateFocusUnderGaze();
-  if (focusEl) focusEl.click();
-});
-
-/* drag update based on head movement (device orientation) */
-function updateDragFromHead() {
-  if (!dragging || !dragTarget) return;
-  // use change in gamma as horizontal head movement; map to slider range
-  const deltaGamma = (currentGamma || 0) - dragStartGamma; // degrees
-  // choose sensitivity: e.g., 30 degrees full width -> map to full range
-  const sensitivityDeg = 40;
-  const frac = deltaGamma / sensitivityDeg; // -1..1 roughly
-  const min = parseFloat(dragTarget.min || 0), max = parseFloat(dragTarget.max || 1), step = parseFloat(dragTarget.step || 0.01);
-  let newVal = dragStartValue + frac * (max - min);
-  // clamp and snap to step
-  newVal = Math.max(min, Math.min(max, newVal));
-  // snap to step resolution
-  if (step > 0) newVal = Math.round(newVal / step) * step;
-  dragTarget.value = newVal;
-  // dispatch input event so UI responds
-  dragTarget.dispatchEvent(new Event('input', { bubbles: true }));
-}
-
-/* ========== control event wiring ========== */
-startBtn.addEventListener('click', async () => {
-  await startCamera();
-});
-
-flipBtn.addEventListener('click', async () => {
-  usingFacingMode = (usingFacingMode === 'environment') ? 'user' : 'environment';
-  currentDeviceId = null;
-  await startCamera();
-});
-
-fsBtn.addEventListener('click', () => {
-  const c = document.getElementById('container');
-  if (!document.fullscreenElement) c.requestFullscreen?.();
-  else document.exitFullscreen?.();
-});
-
-zoomControl.addEventListener('input', (e) => {
-  zoom = parseFloat(e.target.value) || 1;
-  zoomVal.textContent = zoom.toFixed(2);
-});
-
-mirrorChk.addEventListener('change', (e) => { mirror = e.target.checked; });
-
-deviceSelect.addEventListener('change', async (e) => {
-  const id = e.target.value;
-  if (!id) return;
-  stopStream();
-  try {
-    const constraints = { video: { deviceId: { exact: id }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: parseInt(fpsSelect.value,10) } } };
-    stream = await navigator.mediaDevices.getUserMedia(constraints);
-    video.srcObject = stream; await video.play();
-    resizeCanvases(); enumerateCameras();
-  } catch (err) { console.error('device select error', err); showPopup('Failed to switch camera'); }
-});
-
-fpsSelect.addEventListener('change', async () => {
-  if (!stream) return;
-  const track = stream.getVideoTracks()[0];
-  if (track && track.applyConstraints) {
-    try { await track.applyConstraints({ frameRate: { ideal: parseInt(fpsSelect.value,10) } }); }
-    catch (err) { console.warn('applyConstraints frameRate failed', err); }
-  }
-});
-
-sepControl.addEventListener('input', (e) => { eyeSep = parseFloat(e.target.value) || 0; sepVal.textContent = eyeSep.toFixed(3); });
-parControl.addEventListener('input', (e) => { parallax = parseFloat(e.target.value) || 0; parVal.textContent = parallax.toFixed(2); });
-alignX.addEventListener('input', (e) => { alignOffset = parseFloat(e.target.value) || 0; });
-
-menuClose.addEventListener('click', () => closeMenu());
-wideBtn.addEventListener('click', async () => {
-  await tryWideLens();
-});
-wideModeChk.addEventListener('change', async (e) => {
-  if (!stream) return;
-  if (e.target.checked) {
-    const ok = await tryWideLens();
-    if (!ok) { wideModeChk.checked = false; }
-  } else {
-    // uncheck: restart default facingMode stream
-    await startCamera();
-  }
-});
-
-/* reflect slider UI values when changed programmatically */
-document.querySelectorAll('input[type="range"]').forEach(r => {
-  r.addEventListener('input', () => { /* handled individually */ });
-});
-
-/* when slider values change visually update text spans for sep/par */
-sepVal.textContent = eyeSep.toFixed(3);
-parVal.textContent = parallax.toFixed(2);
-
-/* ========== small loop to update drag & focus ========== */
-function smallLoop() {
-  updateDragFromHead();
-  updateFocusUnderGaze();
-  rafSmall = requestAnimationFrame(smallLoop);
-}
-let rafSmall = requestAnimationFrame(smallLoop);
-
-/* ========== orientation init ========== */
-function tryEnableGyroSilently() {
-  // called when opening menu; we still request permission if needed
-  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-    // do nothing here; enableGyro() will request permission when opening menu
-  } else {
-    window.addEventListener('deviceorientation', onDeviceOrientation);
-    gyroEnabled = true;
-  }
-}
-
-/* ========== cleanup ========== */
-window.addEventListener('resize', () => { resizeCanvases(); if (menuAnchor) updateMenuAnchorPosition(); });
-window.addEventListener('pagehide', stopStream);
-window.addEventListener('beforeunload', stopStream);
-
-/* ========== auto-start behavior disabled: user clicks Start Camera to begin ========== */
-
-/* ========== initialize UI state ========== */
-resizeCanvases();
-
-/* ========== helpful hints for first menu open: convert screen tap into anchor angles ========== */
-// When menu is opened by the first tap we should request gyro permission and then compute anchor angles using the current orientation.
-// So intercept touch that opens menu to call enableGyro
-(function interceptMenuOpenForGyro() {
-  // override openMenuAtCurrentLook to call enableGyro() request flow then open anchored menu using the orientation we get (or fallback)
-  const orig = openMenuAtCurrentLook;
-  openMenuAtCurrentLook = async function(x,y) {
-    // request permission first (on iOS this will prompt)
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-      try {
-        const res = await DeviceOrientationEvent.requestPermission();
-        if (res !== 'granted') { showPopup('Gyro permission denied. Menu will still appear but not world-anchored.'); }
-        else {
-          // wait a tiny moment for events to populate
-          await new Promise(r => setTimeout(r, 120));
-        }
-      } catch (err) {
-        console.warn('gyro request error', err);
-        showPopup('Gyro permission error.');
-      }
-    }
-    // attach listener if not already
-    if (!gyroEnabled) { window.addEventListener('deviceorientation', onDeviceOrientation); gyroEnabled = true; }
-    // if we have currentGamma from deviceorientation, anchor using that; else fallback to screen coords mapping
-    if (typeof currentGamma === 'number') {
-      menuAnchor = { anchored: true, gamma: currentGamma || 0, beta: currentBeta || 0 };
-    } else {
-      // fallback mapping from screen coords
-      const cx = x || window.innerWidth/2, cy = y || window.innerHeight/2;
-      const relX = cx - (window.innerWidth/2), relY = cy - (window.innerHeight/2);
-      menuAnchor = { anchored: true, gamma: (relX/(window.innerWidth/3))*90, beta: (relY/(window.innerHeight/3))*90 };
-    }
-    updateMenuAnchorPosition();
-    menu.style.display = 'block';
-    menu.classList.add('visible');
-    gazePointer.style.display = 'block';
-    menuActive = true;
-  };
-})();
-
-/* ========== initial devices listing ========== */
 enumerateCameras();
 
-/* ========== end of script ========== */
+deviceSelect.addEventListener('change', async e=>{
+  if(!e.target.value) return;
+  stopStream();
+  try{
+    const constraints={ video:{ deviceId:{exact:e.target.value}, width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:parseInt(fpsSelect.value,10)} } };
+    stream=await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject=stream; await video.play(); resizeCanvases();
+  }catch(err){ console.error(err); }
+});
+
+fpsSelect.addEventListener('change', async ()=>{
+  const desired=parseInt(fpsSelect.value,10);
+  if(stream){
+    const track=stream.getVideoTracks()[0];
+    if(track?.applyConstraints) try{ await track.applyConstraints({frameRate:{ideal:desired,max:desired}}); }catch(err){console.warn(err);}
+  }
+});
+
+wideModeChk.addEventListener('change', async ()=>{
+  if(!stream) return;
+  try{
+    const devices=await navigator.mediaDevices.enumerateDevices();
+    const cams=devices.filter(d=>d.kind==='videoinput');
+    const wideCandidate=cams.find(c=>/wide|ultra|ultrawide|0.5x/i.test(c.label));
+    if(wideModeChk.checked && wideCandidate){
+      stopStream();
+      const constraints={ video:{ deviceId:{exact:wideCandidate.deviceId}, width:{ideal:1920}, height:{ideal:1080} } };
+      stream=await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject=stream; await video.play(); resizeCanvases(); return;
+    }else if(wideModeChk.checked){
+      alert('Could not switch to wide-lens camera');
+      wideModeChk.checked=false;
+    }
+  }catch(err){ console.warn(err); }
+});
+
+function ensureRotated(svw,svh){
+  if(svh<=svw) return {src:video,w:svw,h:svh};
+  if(rotCanvas.width!==svh || rotCanvas.height!==svw){ rotCanvas.width=svh; rotCanvas.height=svw; }
+  rotCtx.save(); rotCtx.clearRect(0,0,rotCanvas.width,rotCanvas.height);
+  rotCtx.translate(rotCanvas.width,0); rotCtx.rotate(Math.PI/2);
+  rotCtx.drawImage(video,0,0,svw,svh); rotCtx.restore();
+  return {src:rotCanvas,w:rotCanvas.width,h:rotCanvas.height};
+}
+
+// VR crosshair coordinates (center of each canvas)
+function drawLoop(){
+  const ctxL=leftCanvas.getContext('2d');
+  const ctxR=rightCanvas.getContext('2d');
+  const svw=video.videoWidth, svh=video.videoHeight;
+  if(!svw || !svh){ rafId=requestAnimationFrame(drawLoop); return; }
+  const {src,w,h}=ensureRotated(svw,svh);
+  [ {ctx:ctxL,offset:-eyeSep/2}, {ctx:ctxR,offset:eyeSep/2} ].forEach(({ctx,offset})=>{
+    ctx.clearRect(0,0,leftCanvas.width,leftCanvas.height);
+    const sw=w/zoom, sh=h/zoom;
+    const sx=(w-sw)/2 + offset*w/2, sy=(h-sh)/2;
+    ctx.drawImage(src,sx,sy,sw,sh,0,0,ctx.canvas.width,ctx.canvas.height);
+    if(menuActive){
+      ctx.fillStyle='red'; ctx.beginPath();
+      const cx=ctx.canvas.width/2, cy=ctx.canvas.height/2;
+      ctx.arc(cx,cy,8,0,2*Math.PI); ctx.fill();
+      ctx.strokeStyle='white'; ctx.beginPath(); ctx.moveTo(cx-10,cy); ctx.lineTo(cx+10,cy);
+      ctx.moveTo(cx,cy-10); ctx.lineTo(cx,cy+10); ctx.stroke();
+    }
+  });
+  rafId=requestAnimationFrame(drawLoop);
+}
+
+// Double-tap toggle menu & tap/hold logic
+container.addEventListener('pointerdown', e=>{
+  const now=Date.now();
+  if(now-lastTapTime<300){ // double-tap
+    menuActive=!menuActive;
+    menu.style.display=menuActive?'flex':'none';
+    lastTapTime=0;
+  }else{
+    lastTapTime=now;
+    holding=true;
+    // check if tap is over a slider
+    if(menuActive){
+      const rect=zoomMenu.getBoundingClientRect();
+      if(e.clientX>=rect.left && e.clientX<=rect.right && e.clientY>=rect.top && e.clientY<=rect.bottom){
+        activeSlider=zoomMenu;
+        startValue=parseFloat(zoomMenu.value);
+        startHeadX=e.clientX;
+      }
+    }
+  }
+});
+
+container.addEventListener('pointermove', e=>{
+  if(holding && activeSlider){
+    const deltaX=e.clientX-startHeadX;
+    const sliderRange=parseFloat(activeSlider.max)-parseFloat(activeSlider.min);
+    const newValue=Math.min(parseFloat(activeSlider.max),Math.max(parseFloat(activeSlider.min), startValue + deltaX/100*sliderRange));
+    activeSlider.value=newValue;
+    zoom=parseFloat(newValue); zoomControl.value=newValue; zoomVal.textContent=newValue.toFixed(2); zoomMenuVal.textContent=newValue.toFixed(2);
+  }
+});
+
+container.addEventListener('pointerup', e=>{ holding=false; activeSlider=null; });
+
 </script>
 </body>
 </html>
